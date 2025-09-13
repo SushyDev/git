@@ -1,4 +1,4 @@
-# Git Configuration
+# Git
 
 This repository contains custom Git configuration settings for dotfiles management.
 
