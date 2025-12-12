@@ -1,13 +1,41 @@
 #!/bin/sh
 
-# Extract the current branch name
-BRANCH_NAME=$(git symbolic-ref --short HEAD)
+COMMIT_MSG_FILE=$1
+COMMIT_SOURCE=$2
+SHA1=$3
 
-# Identify the JIRA ticket number from the branch name
-JIRA_TICKET=$(echo $BRANCH_NAME | grep -oE '[A-Z]+-[0-9]+')
-
-# Prepend the JIRA ticket to the commit message if found
-if [ ! -z "$JIRA_TICKET" ]; then
-    COMMIT_MSG=$(cat $1)
-    echo "$JIRA_TICKET $COMMIT_MSG" > $1
+# 1. Skip if this is a merge commit
+# We usually don't want to mess with auto-generated merge messages.
+if [ "$COMMIT_SOURCE" = "merge" ]; then
+    exit 0
 fi
+
+# 2. Extract the current branch name
+# 2>/dev/null suppresses errors if we are in a detached HEAD state
+BRANCH_NAME=$(git symbolic-ref --short HEAD 2>/dev/null)
+
+# Exit if we are not on a branch
+if [ -z "$BRANCH_NAME" ]; then
+    exit 0
+fi
+
+# 3. Identify the JIRA ticket number from the branch name
+JIRA_TICKET=$(echo "$BRANCH_NAME" | grep -oE '[A-Z]+-[0-9]+')
+
+# Exit if no JIRA ticket is found in the branch name
+if [ -z "$JIRA_TICKET" ]; then
+    exit 0
+fi
+
+# 4. Check if the ticket is already in the commit message
+# This prevents adding the ticket twice during 'git commit --amend'
+if grep -q "$JIRA_TICKET" "$COMMIT_MSG_FILE"; then
+    exit 0
+fi
+
+# 5. Prepend the ticket to the commit message
+# We use a temporary file to ensure we don't lose formatting/newlines
+# from the original message (e.g. if using a template).
+TEMP_FILE=$(mktemp)
+echo "$JIRA_TICKET $(cat "$COMMIT_MSG_FILE")" > "$TEMP_FILE"
+mv "$TEMP_FILE" "$COMMIT_MSG_FILE"
